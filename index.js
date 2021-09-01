@@ -11,7 +11,7 @@ const client = new Client({
 
 const chsend = (wh, data) => {
   wh.send({
-    content: data.content,
+    content: data.content === '' ? null : data.content,
     username: data.userTag,
     avatarURL: data.userAvatar,
     files: data.attachments,
@@ -24,23 +24,46 @@ const newwh = (ch) =>
     avatar: client.user.displayAvatarURL(),
   })
 
-const newmsg = (msg) => {
-  client.channels.cache.get('861526151096696832').send(
-    JSON.stringify({
-      type: 'message',
-      content: msg.content,
-      messageId: msg.id,
-      channelId: msg.channel.id,
-      channelName: msg.channel.name,
-      userId: msg.author.id,
-      userTag: msg.author.tag,
-      userAvatar: msg.author.displayAvatarURL(),
-      guildId: msg.guild.id,
-      guildName: msg.guild.name,
-      guildIcon: msg.guild.iconURL(),
-      attachments: msg.attachments.map((a) => a.url),
-    }),
-  )
+const newHgc = (msg) => {
+  const sendJson = {
+    type: 'message',
+    content: msg.content,
+    messageId: msg.id,
+    channelId: msg.channelId,
+    channelName: msg.channel.name,
+    userId: msg.author.id,
+    userTag: msg.author.tag,
+    userAvatar: msg.author.displayAvatarURL(),
+    guildId: msg.guild.id,
+    guildName: msg.guild.name,
+    guildIcon: msg.guild.iconURL(),
+    attachments: msg.attachments.map((a) => a.url),
+  }
+
+  client.channels.cache.get('861526151096696832').send(JSON.stringify(sendJson))
+}
+
+const newSgc = (msg) => {
+  const sendJson = {
+    type: 'message',
+    content: msg.content,
+    messageId: msg.id,
+    channelId: msg.channelId,
+    channelName: msg.channel.name,
+    userId: msg.author.id,
+    userName: msg.author.username,
+    userDiscriminator: msg.author.discriminator,
+    userAvatar: msg.author.avatar,
+    isBot: false,
+    guildId: msg.guild.id,
+    guildName: msg.guild.name,
+    guildIcon: msg.guild.icon,
+  }
+
+  if (msg.attachments.size > 0)
+    sendJson.attachmentsUrl = msg.attachments.map((a) => a.url)
+
+  client.channels.cache.get('707158257818664991').send(JSON.stringify(sendJson))
 }
 
 client
@@ -90,6 +113,31 @@ client
             else newwh(ch).then((wh) => chsend(wh, data))
           })
         })
+    } else if (message.channelId === '707158257818664991') {
+      const data = JSON.parse(message.content)
+
+      data.userAvatar = data.userAvatar
+        ? `https://cdn.discordapp.com/avatars/${data.userId}/${data.userAvatar}.png`
+        : 'https://cdn.discordapp.com/embed/avatars/0.png'
+      data.userTag = data.userName + '#' + data.userDiscriminator
+      data.attachments = data.attachmentsUrl
+
+      client.channels.cache
+        .filter(
+          (ch) =>
+            ch.id !== data.channelId && ch.type === 'GUILD_TEXT' && ch.topic,
+        )
+        .filter((ch) => ch.topic.match(/mamebot-sgc/i))
+        .forEach((ch) => {
+          ch.fetchWebhooks().then((wh) => {
+            const webhook = wh
+              .filter((a) => a.owner.id === client.user.id)
+              .first()
+
+            if (webhook) chsend(webhook, data)
+            else newwh(ch).then((wh) => chsend(wh, data))
+          })
+        })
     } else if (
       message.channel.topic &&
       message.channel.topic.match(/mamebot-hgc/i)
@@ -101,9 +149,8 @@ client
           .filter((a) => a.owner.id === message.client.user.id)
           .first()
 
-        if (webhook) {
-          newmsg(message)
-        } else {
+        if (webhook) newHgc(message)
+        else {
           newwh(message.channel)
           client.channels.cache.get('861526151096696832').send(
             JSON.stringify({
@@ -115,7 +162,27 @@ client
               guildIcon: message.guild.iconURL(),
             }),
           )
-          newmsg(message)
+          newHgc(message)
+        }
+      })
+
+      const compReact = await message.react('845330856100757535')
+      setTimeout(() => compReact.remove(), 5000)
+    } else if (
+      message.channel.topic &&
+      message.channel.topic.match(/mamebot-sgc/i)
+    ) {
+      if (message.author.bot) return
+
+      message.channel.fetchWebhooks().then((wh) => {
+        const webhook = wh
+          .filter((a) => a.owner.id === message.client.user.id)
+          .first()
+
+        if (webhook) newSgc(message)
+        else {
+          newwh(message.channel)
+          newSgc(message)
         }
       })
 
